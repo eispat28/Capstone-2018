@@ -74,7 +74,8 @@ ggplot(Virgin_data, aes(x = Airline, y = Portion_of_Negative_Reason, fill = Reas
 
 ```
 
-### ------------------------------------------------------------------------------------------------------------- ### ### Sentiment Analysis ###
+### ------------------------------------------------------------------------------------------------------------- 
+### ### Sentiment Analysis ###
 
 ### Establish word Dictionaries for positive and negative words
 ```{r}
