@@ -1,0 +1,173 @@
+---
+title: 'Captstone: Airline Sentiment Analysis - Twitter Dataset'
+## Machine Learning algorithms to classify tweets
+
+output:
+html_document: default
+pdf_document: default
+word_document: default
+---
+### 1. Load the libraries needed 
+```{r}
+library("tm")
+library("SnowballC")
+
+library("caTools")
+library("rpart")
+library("rpart.plot")
+library("randomForest")
+```
+
+
+### 2. Read the excel file in the folder. 
+```{r}
+ 
+dataset <- read.csv(file = "/Users/eishapatel/Desktop/Capstone/Airline-Sentiment-2-w-AA.csv", header = T, 
+                    stringsAsFactors = FALSE, fileEncoding="latin1")
+
+reduced_data = data.frame(dataset$airline_sentiment, dataset$text)
+
+names(reduced_data) <- c("Sentiment","tweet")
+
+str(reduced_data)
+
+# add a new variable to detect clear negative sentiment
+reduced_data$Negative = as.factor(reduced_data$Sentiment == 'negative')
+
+```
+
+### 3. Creating a Corpus
+```{r}
+
+# Creating a corpus: a collection of documents and clean it up
+corpus = Corpus(VectorSource(reduced_data$tweet))
+corpus = tm_map(corpus, content_transformer(tolower)) # lowercase all tweets
+corpus = tm_map(corpus, content_transformer(stripWhitespace)) # remove spaces
+removeURL = function(x) gsub(" ?(f|ht)tp(s?)://(.*)[.][a-z]+", "", x) # functions to remove URLS
+corpus = tm_map(corpus, content_transformer(removeURL))
+corpus = tm_map(corpus, removeWords, stopwords("english")) # remove stopwords
+corpus = tm_map(corpus, content_transformer(removePunctuation)) # remove punctuation
+corpus = tm_map(corpus, content_transformer(removeNumbers)) # remove numbers
+corpus = tm_map(corpus, stemDocument) # remove stemming words 
+
+corpus
+corpus[[10]]$content
+
+```
+
+### 4. Bags-of-Words
+```{r}
+
+# Create a document-term-matrix 
+# rows = documents (or tweets)
+# columns = words (in the tweets)
+dtm = DocumentTermMatrix(corpus)
+dtm
+inspect(dtm[10:15, 200:205])
+
+# remove the odd terms that appear in less than 20 documents
+freq_ge_20 = findFreqTerms(dtm, lowfreq = 20)
+freq_ge_20
+```
+
+### 5. Reducing the dataset
+```{r}
+
+# keeps terms that appear in 0.5% or more of the tweets
+sparse_dtm = removeSparseTerms(dtm, 0.995)
+sparse_dtm
+
+```
+
+### 6. Converting to a data frame
+```{r}
+
+# converting dtm to a dataframe
+tweetsSparse = as.data.frame(as.matrix(sparse_dtm))
+colnames(tweetsSparse) = make.names(colnames(tweetsSparse))
+
+# add the Negative dependent variable we created earlier
+tweetsSparse$Negative = reduced_data$Negative
+```
+
+### 7. Split the data into training/test sets
+```{r}
+
+set.seed(123)
+split = sample.split(tweetsSparse$Negative, SplitRatio = 0.7)
+
+trainSparse = subset(tweetsSparse, split == TRUE)
+testSparse = subset(tweetsSparse, split == FALSE)
+
+```
+
+### 8. Decision Tree
+```{r}
+
+tweetCART = rpart(Negative ~ . , data = trainSparse, method = "class", minsplit = 2,
+                  minbucket = 1)
+prp(tweetCART)
+
+predictCART = predict(tweetCART, newdata = testSparse, type = "class")
+
+# find the confusion matrix for our predictions
+cmat_CART = table(testSparse$Negative, predictCART)
+cmat_CART
+
+accu_CART = (cmat_CART[1,1] + cmat_CART[2,2])/sum(cmat_CART)
+accu_CART
+
+
+```
+
+### 10. Baseline Model
+```{r}
+cmat_baseline = table(testSparse$Negative)
+cmat_baseline
+
+accu_baseline = max(cmat_baseline)/sum(cmat_baseline)
+accu_baseline
+
+```
+
+### 11. Random Forest Model
+```{r}
+
+set.seed(123)
+tweetRF = randomForest(Negative ~ . , data = trainSparse)
+tweetRF
+
+```
+
+### 11. Random Forest Model (part 2)
+```{r}
+
+predictRF = predict(tweetRF, newdata = testSparse)
+cmat_RF = table(testSparse$Negative, predictRF)
+cmat_RF
+
+accu_RF = (cmat_RF[1,1] + cmat_RF[2,2])/sum(cmat_RF)
+accu_RF
+
+```
+
+### 12. Logistic Regression Model
+```{r}
+
+tweetLog = glm(Negative ~ . , data = trainSparse, family = "binomial")
+summary(tweetLog)
+
+```
+
+### 13. Logistic Regression Model (Part 2)
+```{r}
+
+predictLog = predict(tweetLog, type = "response", newdata = testSparse)
+cmat_Log = table(testSparse$Negative, predictLog > 0.5)
+cmat_Log
+
+accu_Log = (cmat_Log[1,1] + cmat_Log[2,2])/sum(cmat_Log)
+accu_Log
+
+```
+

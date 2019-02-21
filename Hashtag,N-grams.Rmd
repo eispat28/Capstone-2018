@@ -1,0 +1,100 @@
+---
+title: 'Captstone: Airline Sentiment Analysis - Twitter Dataset'
+## term frequency–inverse document frequency
+
+output:
+html_document: default
+pdf_document: default
+word_document: default
+---
+
+### 1. Read the excel file in the folder. 
+```{r}
+dataset <- read.csv(file = "/Users/eishapatel/Desktop/Capstone/Airline-Sentiment-2-w-AA.csv", header = T, 
+                    stringsAsFactors = FALSE, fileEncoding="latin1")
+
+reduced_data = data.frame(dataset$X_unit_id, dataset$airline_sentiment, dataset$negativereason, dataset$airline, dataset$text)
+
+names(reduced_data) <- c("id", "Sentiment", "Reason", "Airline", "tweet")
+
+str(reduced_data)
+```
+
+### 2. Most common hashtags
+```{r}
+library(stringr)
+
+American_data = subset(reduced_data, Airline == "American")
+Delta_data = subset(reduced_data, Airline == "Delta")
+Southwest_data = subset(reduced_data, Airline == "Southwest")
+United_data = subset(reduced_data, Airline == "United")
+US_data = subset(reduced_data, Airline == "US Airways")
+Virgin_data = subset(reduced_data, Airline == "Virgin America")
+
+hash_tag = function(x){
+  hashtags = str_extract_all(x, "#\\w+")
+  hashtags = unlist(hashtags)
+  hashtags = tolower(hashtags) #make all tweets lowercase
+  hashtag_freq = as.data.frame(table(hashtags))
+
+  return(hashtag_freq[order(hashtag_freq$Freq, decreasing = TRUE), ])
+}
+
+American_hash_tag = hash_tag(American_data$tweet)
+Delta_hash_tag = hash_tag(Delta_data$tweet)
+Southwest_hash_tag = hash_tag(Southwest_data$tweet)
+United_hash_tag = hash_tag(United_data$tweet)
+US_hash_tag = hash_tag(US_data$tweet)
+Virgin_hash_tag = hash_tag(Virgin_data$tweet)
+
+head(American_hash_tag)
+head(Delta_hash_tag)
+head(Southwest_hash_tag)
+head(United_hash_tag)
+head(US_hash_tag)
+head(Virgin_hash_tag)
+```
+
+
+### 3. BAG-OF-WORDS -> creating a document term matrix
+```{r}
+library(tidytext)
+library(tidyverse)
+library(dplyr)
+library(tm)
+
+# Begin by creating a corpus: a collection of documents and clean it up
+corpus = Corpus(VectorSource(reduced_data$tweet))
+corpus = tm_map(corpus, content_transformer(tolower)) # lowercase all tweets
+corpus = tm_map(corpus, content_transformer(stripWhitespace)) # remove spaces
+removeURL = function(x) gsub(" ?(f|ht)tp(s?)://(.*)[.][a-z]+", "", x) # functions to remove URLS
+corpus = tm_map(corpus, content_transformer(removeURL))
+corpus = tm_map(corpus, removeWords, stopwords("english")) # remove stopwords
+corpus = tm_map(corpus, content_transformer(removePunctuation)) # remove punctuation
+corpus = tm_map(corpus, content_transformer(removeNumbers)) # remove numbers
+# corpus = tm_map(corpus, stemDocument) # remove stemming words 
+
+# inspect the first 5 document of the corpus
+corpus[[1]]$content[1]
+corpus[[2]]$content[1]
+corpus[[3]]$content[1]
+corpus[[4]]$content[1]
+corpus[[5]]$content[1]
+
+# Create an N-gram function
+NLPbigramTokenizer = function(x) {
+  unlist(lapply(ngrams(words(x), 2), paste, collapse = " "), use.names = FALSE)
+}
+
+# Create a document term matrix - 
+# rows = documents (or tweets)
+# columns = words (in the tweets)
+tdm = TermDocumentMatrix(corpus, control = list(tokenize = NLPbigramTokenizer))
+inspect(tdm[1000:1005, 505:510]) # Let's see what the matrix looks like
+
+sparse_tdm = removeSparseTerms(tdm, 0.995) # keep terms that appear in 0.5% or more of the tweets
+
+# Identify the bigrams which occur >= 100 times
+freq_bigrams = findFreqTerms(sparse_tdm, lowfreq = 100)
+freq_bigrams
+```

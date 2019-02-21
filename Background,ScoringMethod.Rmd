@@ -1,0 +1,291 @@
+---
+title: 'Captstone: Airline Sentiment Analysis - Twitter Dataset'
+
+output:
+html_document: default
+pdf_document: default
+word_document: default
+---
+
+### 1. Read the excel file in the folder. 
+```{r}
+
+dataset <- read.csv(file = "/Users/eishapatel/Desktop/Capstone/Airline-Sentiment-2-w-AA.csv", header = T)
+
+```
+
+### 2. Histogram 
+```{r}
+
+reduced_data = data.frame(dataset$airline_sentiment, dataset$negativereason, 
+                          dataset$airline, dataset$text)
+
+names(reduced_data) <- c("Sentiment", "Reason", "Airline", "tweet")
+
+#The table below breaks down the Sentiment categories for each airline service.
+table(reduced_data[,c("Airline","Sentiment")])
+
+#The table below breaks down the Sentiment categories for each airline as a percentage value
+prop.table(table(reduced_data[,c("Airline","Sentiment")]), margin = 1)*100
+
+#Plotting the histogram
+require(ggplot2)
+graph_material = as.data.frame(prop.table(table(reduced_data[,c("Airline","Sentiment")]), margin = 1)*100)
+colnames(graph_material) = c("Airlines", "Airline_Sentiment", "Percentage_of_Sentiment")
+
+ggplot(graph_material,aes(x = Airlines, y = Percentage_of_Sentiment,fill = Airline_Sentiment))+geom_bar(stat="identity",color = "black",position = "dodge")+scale_fill_manual(values = c("#d03501","#7b8083","#288fdd"))+geom_text(aes(label=round(Percentage_of_Sentiment,digits=1), vjust=-0.4),position = position_dodge(width = 1))
+
+```
+
+### There is a lot of negative sentiment! Lets figure out why.
+```{r}
+require(ggplot2)
+
+#The reason column has a lot of empty values so we must remove those first
+reason_data = reduced_data[!reduced_data$Reason == "",]
+graph_material2 = as.data.frame(prop.table(table(reason_data[,c("Reason", "Airline")]))*100)
+colnames(graph_material2) = c("Reason", "Airline", "Portion_of_Negative_Reason")
+
+#Plot each individual airline company against their reasons
+
+# American Airlines
+American_data = subset(graph_material2, Airline == "American")
+ggplot(American_data, aes(x = Airline, y = Portion_of_Negative_Reason, fill = Reason))+geom_bar(stat = "identity", position = "dodge")
+
+# Delta Airlines
+Delta_data = subset(graph_material2, Airline == "Delta")
+ggplot(Delta_data, aes(x = Airline, y = Portion_of_Negative_Reason, fill = Reason))+geom_bar(stat = "identity", position = "dodge")
+
+# Southwest Airlines
+Southwest_data = subset(graph_material2, Airline == "Southwest")
+ggplot(Southwest_data, aes(x = Airline, y = Portion_of_Negative_Reason, fill = Reason))+geom_bar(stat = "identity", position = "dodge")
+
+# United Airlines
+United_data = subset(graph_material2, Airline == "United")
+ggplot(United_data, aes(x = Airline, y = Portion_of_Negative_Reason, fill = Reason))+geom_bar(stat = "identity", position = "dodge")
+
+# US Airlines
+US_data = subset(graph_material2, Airline == "US Airways")
+ggplot(US_data, aes(x = Airline, y = Portion_of_Negative_Reason, fill = Reason))+geom_bar(stat = "identity", position = "dodge")
+
+# Virgin Airlines
+Virgin_data = subset(graph_material2, Airline == "Virgin America")
+ggplot(Virgin_data, aes(x = Airline, y = Portion_of_Negative_Reason, fill = Reason))+geom_bar(stat = "identity", position = "dodge")
+
+```
+
+### ------------------------------------------------------------------------------------------------------------- ### ### Sentiment Analysis ###
+
+### Establish word Dictionaries for positive and negative words
+```{r}
+
+setwd("~/Desktop/Capstone")
+neg = scan("negative-words.txt", what = "character", comment.char = ";")
+pos = scan("positive-words.txt", what = "character", comment.char = ";")
+
+# Add words to the dictionary that do not exist
+# American slang words need to be included in the dictionaries 
+neg = c(neg, 'wtf', 'wonker', 'boo', 'mold', 'sucks', 'wait', 'waiting', 'waited', 'cancel', 'cancelled', 'cancelling', 'shit', 'rotten', 'epicfail', 'mechanical')
+pos = c(pos, 'lit', 'bro', 'thank', 'thanks')
+```
+
+### Preprocessing tweets and assigning a Sentiment Score
+```{r}
+library(tidytext)
+library(tidyverse)
+data("stop_words")
+
+sentiment_score = function(tweets, pos.words, neg.words, brand)
+{
+  
+  require(plyr)
+  require(stringr)
+  
+  scores = laply(tweets, function(tweet, pos.words, neg.words) {
+  
+  tweet = gsub('https://','',tweet) #remove https://
+  tweet = gsub('http://','',tweet) #remove http://
+  tweet = gsub('[^[:graph:]]',' ', tweet) #remove emojis
+  tweet = gsub('[[:punct:]]', '', tweet) # remove punctuation
+  tweet = gsub('[[:cntrl:]]', '', tweet) # remove control characters
+  tweet = gsub('\\d+', '', tweet) # removes numbers 
+  tweet = str_replace(tweet, "[^[:graph:]]", " ")
+  tweet = tolower(tweet) # all lowercase letters
+  
+  word.list = str_split(tweet, '\\s+') # splits the tweets by word in a list
+  
+  words = unlist(word.list) # convert the list into a vector
+ 
+  pos.matches = match(words, pos.words) # returns any matches from the positive dictionary as T/F
+  neg.matches = match(words, neg.words) # returns any matched from the negative dictionary as T/F
+  
+  pos.matches = !is.na(pos.matches) # True = 1, False = 0
+  neg.matches = !is.na(neg.matches)
+  
+  score = sum(pos.matches) - sum(neg.matches) 
+  
+  return(score)}, pos.words, neg.words)
+  
+  scores.df = data.frame(airline = brand, score = scores, text = tweets)
+  
+  return(scores.df)
+  
+}
+
+Twitter_tweets = as.data.frame(reduced_data[,c("Airline","tweet")])
+colnames(Twitter_tweets) = c("Airlines", "tweet")
+
+American_tweets = subset(Twitter_tweets$tweet, Twitter_tweets$Airlines == "American")
+American_sentiment = sentiment_score(American_tweets, pos, neg, 'American')
+head(American_sentiment,5)
+
+Delta_tweets = subset(Twitter_tweets$tweet, Twitter_tweets$Airlines == "Delta")
+Delta_sentiment = sentiment_score(Delta_tweets, pos, neg, 'Delta')
+head(Delta_sentiment,5)
+
+Southwest_tweets = subset(Twitter_tweets$tweet, Twitter_tweets$Airlines == "Southwest")
+Southwest_sentiment = sentiment_score(Southwest_tweets, pos, neg, 'Southwest')
+head(Southwest_sentiment,5)
+
+United_tweets = subset(Twitter_tweets$tweet, Twitter_tweets$Airlines == "United")
+United_sentiment = sentiment_score(United_tweets, pos, neg, 'United')
+head(United_sentiment,5)
+
+US_tweets = subset(Twitter_tweets$tweet, Twitter_tweets$Airlines == "US Airways")
+US_sentiment = sentiment_score(US_tweets, pos, neg, 'US')
+head(US_sentiment,5)
+
+Virgin_data_tweets = subset(Twitter_tweets$tweet, Twitter_tweets$Airlines == "Virgin America")
+Virgin_sentiment = sentiment_score(Virgin_data_tweets, pos, neg, 'Virgin')
+head(Virgin_sentiment,5)
+```
+
+### Plot of the Sentiment Scores
+```{r}
+require(ggplot2)
+
+# negative # --> negative
+# positive # --> positive
+# 0 --> neutral
+
+hist(American_sentiment$score, main = "American Air Sentiment", xlab = "Score")
+
+hist(Delta_sentiment$score, main = "Delta Airlines Sentiment", xlab = "Score")
+
+hist(Southwest_sentiment$score, main = "Southwest Air Sentiment", xlab = "Score")
+
+hist(United_sentiment$score, main = " United Airlines Sentiment", xlab = "Score")
+
+hist(US_sentiment$score, main = " US Airways Sentiment", xlab = "Score")
+
+hist(Virgin_sentiment$score, main = " Virgin Airlines Sentiment", xlab = "Score")
+
+```
+
+### Compare the resuts of the sentiment score to the manually done analysis 
+```{r}
+# First we need to convert the scores into 1 of the 3 categories below:
+# negative # --> negative
+# positive # --> positive
+# 0 --> neutral
+
+score_convertor = function(x){
+  
+  n = 0
+  p = 0
+  neu = 0
+  
+  for (i in 1:length(x)){
+    
+    if (x[i] < 0){
+      n = n+1
+    }
+    if (x[i] > 0){
+      p = p+1
+    }
+    if (x[i] == 0){
+      neu = neu+1
+    }
+    
+  }
+  y = c(negative = n, positive = p, neutral = neu)
+  return(y)
+}
+
+# Now categorize the scores into 1 of the 3 categories
+
+American_score = score_convertor(American_sentiment$score)
+Delta_score = score_convertor(Delta_sentiment$score)
+Southwest_score = score_convertor(Southwest_sentiment$score)
+United_score = score_convertor(United_sentiment$score)
+US_score = score_convertor(US_sentiment$score)
+Virgin_score = score_convertor(Virgin_sentiment$score)
+
+rbind(American_score, Delta_score, Southwest_score, United_score, US_score, Virgin_score)
+```
+
+### Focus analysis on extreme scores (very negative(-2) and very positive(+2))
+```{r}
+all_scores = rbind(American_sentiment, Delta_sentiment,Southwest_sentiment,
+                   United_sentiment, US_sentiment, Virgin_sentiment)
+
+all_scores$positive = as.numeric(all_scores$score >= 2) #returns 1 if condition meet
+all_scores$negative = as.numeric(all_scores$score <= -2)
+
+p = aggregate(positive ~ airline, data = all_scores, sum)
+n = aggregate(negative ~ airline, data = all_scores, sum)
+
+totals = merge(p, n, by = 'airline')
+totals$total_count = p$positive + n$negative
+totals$percentage_positive= round(100 * p$positive / totals$total_count)
+totals$percentage_negative= round(100 * n$negative / totals$total_count)
+
+totals
+```
+
+### Identify the most reoccuring words in the negative tweets
+```{r}
+#Stopword dictionary
+setwd("~/Desktop/Capstone")
+stopword = scan("stopwords.txt", what = "character", comment.char = ";")
+
+words = subset(all_scores, all_scores$negative == 1) # reduce the all_scores dataframe to only negative scores
+
+# remove all stop words from the tweets with function below
+
+clean = function(tweet, stopword){
+  
+  tweet = gsub('https://','',tweet) #remove https://
+  tweet = gsub('http://','',tweet) #remove http://
+  tweet = gsub('[^[:graph:]]',' ', tweet) #remove emojis
+  tweet = gsub('[[:punct:]]', '', tweet) # remove punctuation
+  tweet = gsub('[[:cntrl:]]', '', tweet) # remove control characters
+  tweet = gsub('\\d+', '', tweet) # removes numbers 
+  tweet = str_replace(tweet, "[^[:graph:]]", " ")
+  tweet = tolower(tweet) # all lowercase letters
+  
+  word.list = str_split(tweet, '\\s+') # splits the tweets by word in a list
+  words = unlist(word.list) # convert the list into a vector
+  
+  cleaned = match(words, stopword)
+  cleaned = !is.na(cleaned) # True = 1, False = 0
+  
+  key_words = vector() # to store all the non stopwords
+  
+  for (i in 1:length(cleaned)){
+    if (cleaned[i] == FALSE){
+      key_words[i] = words[i]
+    }
+  }
+  
+  return(key_words)}
+  
+# Apply stop word removal function to our dataset
+common_words = clean(words$text, stopword)
+
+
+freq_words = as.data.frame(table(common_words))
+freq_words[order(freq_words$Freq, decreasing = TRUE) ,]
+```
+
+
